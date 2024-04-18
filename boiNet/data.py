@@ -7,7 +7,7 @@ import torch
 import numpy as np
 
 class FaceDataset(Dataset):
-    def __init__(self, df_path, image_dir):
+    def __init__(self, df_path, image_dir, return_im_num=False):
         self.dataframe = pd.read_csv(df_path)
         self.image_dir = image_dir
 
@@ -16,17 +16,28 @@ class FaceDataset(Dataset):
             transforms.Resize((92, 84)),
             transforms.ToTensor()
         ])
+        
+        self.return_im_num = return_im_num
     
     def __len__(self):
         return len(self.dataframe)
     
-    def __getitem__(self, idx):
-        img_name = os.path.join(self.image_dir, self.dataframe.iloc[idx, 0])
+    def extract_im_num(self, filename: str):
+        format_i = filename.find('.jpg')
+        
+        if format_i == -1:
+            raise ValueError("Unexpected dataset file format")
+        
+        return torch.tensor(int(filename[:format_i]), dtype=torch.int)
+    
+    def __getitem__(self, idx):        
+        filename = self.dataframe.iloc[idx, 0]
+        img_name = os.path.join(self.image_dir, filename)
+        
         image = Image.open(img_name)
         bbox = self.dataframe.iloc[idx, 1:5].values
         face_crop = image.crop((bbox[0], bbox[1], bbox[2], bbox[3]))
 
-        
         if self.transform:
             face_crop = self.transform(face_crop)
 
@@ -34,6 +45,9 @@ class FaceDataset(Dataset):
         image = to_tensor(image)
         
         bbox = np.array(bbox, dtype=int)
+        
+        if self.return_im_num:
+            return self.extract_im_num(filename), image, face_crop, torch.tensor(bbox)
         
         return image, face_crop, torch.tensor(bbox)
 
