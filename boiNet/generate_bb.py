@@ -31,6 +31,7 @@ for i in tqdm(range(start, end)):
         results.append([file_name, *box])
 
 df = pd.DataFrame(results, columns=['filename', 'x1', 'y1', 'x2', 'y2'])
+df = pd.read_csv('test_set_bb.csv')
 
 # Phase 2: Resize bounding boxes to a consistent size
 # Define new width and height
@@ -49,6 +50,14 @@ df['norm_x1'] = df['center_x'] - new_width / 2
 df['norm_y1'] = df['adjusted_center_y'] - new_height / 2
 df['norm_x2'] = df['center_x'] + new_width / 2
 df['norm_y2'] = df['adjusted_center_y'] + new_height / 2
+
+# Remove anything if the df is out of bounds
+im_w, im_h = 178, 218
+
+df = df[
+    (df['norm_x1'] >= -1) & (df['norm_x2'] <= im_w) &
+    (df['norm_y1'] >= -1) & (df['norm_y2'] <= im_h)
+]
 
 # Create a new dataframe with the filename and normalized coordinates
 norm_df = df[['filename', 'norm_x1', 'norm_y1', 'norm_x2', 'norm_y2']]
