@@ -7,7 +7,7 @@ import numpy as np
 
 mtcnn = MTCNN(keep_all=True)
 image_dir = '../celeba/img_align_celeba'
-output_csv = 'test_set_bb.csv'
+output_csv = 'norm_bounding_boxes.csv'
 results = []
 
 start, end = 20001, 20001 + 10000
