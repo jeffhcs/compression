@@ -107,38 +107,39 @@ class TwoResAutoEncoder(nn.Module):
     
     
 class QuantizedAutoEncoder(nn.Module):
-    def __init__(self, base_ae: Union[BGAutoencoder, FGAutoencoder], input_size: tuple[int], device='cpu'):
+    def __init__(self, base_ae: Union[BGAutoencoder, FGAutoencoder], input_size: tuple[int]):
         super(QuantizedAutoEncoder, self).__init__()
         self.base_ae = base_ae
-        self.base_ae.to(device)
         
         # Measure AE Latent Dim
-        self.latent_dim = self.get_latent_dim(self.base_ae, input_size, device)
+        self.latent_dim = self.get_latent_dim(self.base_ae, input_size)
         
-        self.h_m = torch.ones(self.latent_dim, device=device) * (torch.inf)
-        self.h_M = torch.ones(self.latent_dim, device=device) * (-torch.inf)
+        self.h_m = nn.Parameter(torch.ones(self.latent_dim) * (torch.inf))
+        self.h_M = nn.Parameter(torch.ones(self.latent_dim) * (-torch.inf))
         
-    def get_latent_dim(self, base_ae: Union[BGAutoencoder, FGAutoencoder], input_size: tuple[int], device=None):
+    def get_latent_dim(self, base_ae: Union[BGAutoencoder, FGAutoencoder], input_size: tuple[int]):
         """Return the latent dim of base_ae by running a forward pass."""
-        
+                
+        base_ae.to('cpu')
+                
         with torch.no_grad():
-            out = base_ae.encoder(torch.zeros(input_size, device=device).unsqueeze(0))
+            out = base_ae.encoder(torch.zeros(input_size).unsqueeze(0))
             
             return out.numel()
         
     def quantize(self, h):
-        return torch.round(255 * ((h - self.h_m) / (self.h_M - self.h_m)))
+        return torch.round(255 * ((h - self.h_m) / (self.h_M - self.h_m))).nan_to_num(0)
         
     def unquantize(self, h_bar):
-        return (1 / 255) * ((self.h_M - self.h_m) * h_bar + self.h_m)
+        return (1 / 255) * ((self.h_M - self.h_m) * h_bar + self.h_m).nan_to_num(0)
         
     def forward(self, x):        
         if self.training:
             x = self.base_ae.encoder(x)
             
             # Update biggest, smallest latents seen
-            self.h_m = torch.minimum(self.h_m, torch.min(x, dim=0).values)
-            self.h_M = torch.maximum(self.h_M, torch.max(x, dim=0).values)
+            self.h_m = nn.Parameter(torch.minimum(self.h_m, torch.min(x, dim=0).values))
+            self.h_M = nn.Parameter(torch.maximum(self.h_M, torch.max(x, dim=0).values))
 
             x = self.base_ae.decoder(x)
         else:
@@ -150,11 +151,11 @@ class QuantizedAutoEncoder(nn.Module):
     
     
 class QuantizedTwoResAutoEncoder(nn.Module):
-    def __init__(self, base_two_ae: TwoResAutoEncoder, device='cpu'):
+    def __init__(self, base_two_ae: TwoResAutoEncoder):
         super(QuantizedTwoResAutoEncoder, self).__init__()
         
-        self.fg_ae = QuantizedAutoEncoder(base_two_ae.fg_ae, input_size=(3, 92, 84), device=device)
-        self.bg_ae = QuantizedAutoEncoder(base_two_ae.bg_ae, input_size=(3, 218, 178),device=device)
+        self.fg_ae = QuantizedAutoEncoder(base_two_ae.fg_ae, input_size=(3, 92, 84))
+        self.bg_ae = QuantizedAutoEncoder(base_two_ae.bg_ae, input_size=(3, 218, 178))
         
     def forward(self, image, face):
         fg_output = self.fg_ae(face)
